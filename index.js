@@ -1,5 +1,4 @@
 const { default: makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
-const axios = require("axios");
 const cheerio = require("cheerio");
 const qrcode = require('qrcode-terminal');
 const { resumir } = require("./services/summarizer");
@@ -7,6 +6,8 @@ require("dotenv").config();
 const { URL } = require("url");
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const http = require('http');
+const PORT = process.env.PORT;
 puppeteer.use(StealthPlugin());
 
 async function extrairDadosDaMateria(url) {
@@ -23,27 +24,29 @@ async function extrairDadosDaMateria(url) {
 
         browser = await puppeteer.launch({
             headless: true,
-            executablePath,
+            executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-blink-features=AutomationControlled'
-            ]
+                '--disable-gpu',
+                '--single-process',
+                '--no-zygote'
+            ],
+            timeout: 60000
         });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36');
 
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 120000 });
+        await page.goto(url, { waitUntil: 'load', timeout: 180000 });
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         const html = await page.content();
         const $ = cheerio.load(html);
 
         if (html.includes("captcha") || html.includes("datadome")) {
-            console.warn("⚠️ Página protegida por CAPTCHA/DataDome.");
-            return null;
+            throw new Error("Página protegida por CAPTCHA ou DataDome. Não é possível extrair o conteúdo automaticamente.");
         }
 
         const titulo = $("meta[property='og:title']").attr("content") || $("title").text() || "Título não encontrado";
@@ -59,12 +62,11 @@ async function extrairDadosDaMateria(url) {
 
     } catch (err) {
         console.error("❌ Erro ao extrair dados da matéria:", err.message);
-        return null;
+        throw err;
     } finally {
         if (browser) await browser.close();
     }
 }
-
 
 function getTextoMensagem(msg) {
     if (msg.message?.conversation) return msg.message.conversation;
@@ -124,15 +126,29 @@ async function iniciarBot() {
 
         if (texto.startsWith("http")) {
             await sock.sendMessage(jid, { text: "⏳ Lendo a matéria..." });
-            const conteudo = await extrairDadosDaMateria(texto);
+            let conteudo;
+            try {
+                conteudo = await extrairDadosDaMateria(texto);
+            } catch (erroExtração) {
+                await sock.sendMessage(jid, { text: `❌ Erro ao ler a matéria: ${erroExtração.message}` });
+                return;
+            }
 
             if (!conteudo) {
-                return sock.sendMessage(jid, { text: "❌ Não consegui ler a página por algum motivo, verifique o log nos servidor." });
+                return sock.sendMessage(jid, { text: "❌ Não consegui extrair o conteúdo da página." });
             }
 
             await sock.sendMessage(jid, { text: "🧠 Gerando resumo..." });
 
-            const resumo = await resumir(conteudo.texto);
+            let resumo;
+            try {
+                resumo = await resumir(conteudo.texto);
+            } catch (erroResumo) {
+                console.error("❌ Erro ao resumir:", erroResumo.message);
+                return sock.sendMessage(jid, {
+                    text: `❌ Ocorreu um erro ao gerar o resumo: ${erroResumo.message || "Erro desconhecido"}`
+                });
+            }
 
             const mensagemFinal = [
                 `🕑: ${conteudo.dataHora.toString().trim()}`,
@@ -142,9 +158,7 @@ async function iniciarBot() {
                 `✒️ Resumo:\n${resumo.trim()}`
             ].join('\n');
 
-
-            console.log('📝 Texto resumido e traduzido: ', mensagemFinal);
-
+            console.log('📝 Texto resumido:', mensagemFinal);
             await sock.sendMessage(jid, { text: mensagemFinal });
         }
     });
@@ -153,3 +167,10 @@ async function iniciarBot() {
 }
 
 iniciarBot();
+
+http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('Bot is running');
+}).listen(PORT, () => {
+    console.log(`Listening on port ${PORT}`);
+});
