@@ -39,7 +39,11 @@ async function extrairDadosDaMateria(url) {
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36');
 
-        await page.goto(url, { waitUntil: 'load', timeout: 180000 });
+        try {
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        } catch (navegacaoErro) {
+            throw new Error(`Falha ao navegar para a página: ${navegacaoErro.message}`);
+        }
         await new Promise(resolve => setTimeout(resolve, 5000));
 
         const html = await page.content();
@@ -48,6 +52,10 @@ async function extrairDadosDaMateria(url) {
         if (html.includes("captcha") || html.includes("datadome")) {
             throw new Error("Página protegida por CAPTCHA ou DataDome. Não é possível extrair o conteúdo automaticamente.");
         }
+        if (html.includes("cf-challenge") || html.includes("Access Denied")) {
+            throw new Error("Bloqueio por proteção de bot (Cloudflare/DataDome/etc).");
+        }
+
 
         const titulo = $("meta[property='og:title']").attr("content") || $("title").text() || "Título não encontrado";
         const paragrafos = $("p").map((i, el) => $(el).text()).get();
