@@ -1,0 +1,25 @@
+{
+  "name": "whatsapp-summarizer-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.17",
+    "axios": "^1.9.0",
+    "cheerio": "^1.0.0",
+    "chrome-launcher": "^1.2.0",
+    "dotenv": "^16.5.0",
+    "node-fetch": "^2.7.0",
+    "puppeteer": "^21.3.8",
+    "puppeteer-extra": "^3.3.4",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
