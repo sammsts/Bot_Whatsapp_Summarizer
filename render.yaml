@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: whatsapp-summarizer-bot
+    env: docker
+    plan: free
+    repo: https://github.com/sammsts/Bot_Whatsapp_Summarizer
+    branch: main
